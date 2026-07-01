@@ -1,8 +1,10 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { motion } from "framer-motion";
 import type { Answer } from "./Quiz";
+import { submitResult, type QuizStats } from "@/lib/supabase";
+import Comparison from "./Comparison";
 
 function verdict(pct: number) {
   if (pct >= 90) return { title: "Excelente", note: "Estás listo para el final.", tone: "text-correct" };
@@ -24,6 +26,22 @@ export default function ResultsScreen({
   const score = answers.filter((a) => a.isCorrect).length;
   const pct = total > 0 ? Math.round((score / total) * 100) : 0;
   const v = verdict(pct);
+
+  // Registro anónimo + estadísticas de comparación (una sola vez).
+  const [stats, setStats] = useState<QuizStats | null>(null);
+  const [statsState, setStatsState] = useState<"loading" | "done" | "off">(
+    "loading"
+  );
+  const submitted = useRef(false);
+  useEffect(() => {
+    if (submitted.current) return;
+    submitted.current = true;
+    submitResult(score, total).then((s) => {
+      setStats(s);
+      setStatsState(s ? "done" : "off");
+    });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // Contador animado del porcentaje
   const [display, setDisplay] = useState(0);
@@ -147,6 +165,17 @@ export default function ResultsScreen({
           })}
         </div>
       </motion.div>
+
+      {/* Comparación con los demás (registro anónimo) */}
+      {statsState === "loading" && (
+        <div className="mt-9 flex items-center justify-center gap-3 rounded-3xl border border-line bg-paper-alt/40 py-8 font-sans text-sm text-muted">
+          <span className="h-4 w-4 animate-spin rounded-full border-2 border-line border-t-teal-deep" />
+          Registrando tu resultado…
+        </div>
+      )}
+      {statsState === "done" && stats && (
+        <Comparison stats={stats} myPct={pct} />
+      )}
 
       {/* Repaso de errores */}
       {wrong.length > 0 && (
